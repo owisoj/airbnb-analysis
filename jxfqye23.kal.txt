@@ -1,0 +1,16 @@
+﻿
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+# Explicit paths specified without -i or -o; assuming --only paths...
+# On branch master
+# Your branch is up-to-date with 'origin/master'.
+#
+# Changes to be committed:
+#	new file:   Current Code Including all the EDA parts.txt
+#	new file:   age_gender_bkts.csv.zip
+#	new file:   countries.csv.zip
+#	new file:   sessions.csv.zip
+#	new file:   test_users.csv.zip
+#	new file:   train_users_2.csv.zip
+#
+

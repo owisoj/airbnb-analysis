@@ -1,0 +1,419 @@
+
+
+Repository for helpful R scripts so we can help reduce programming time.
+
+EDA
+
+# Load data and review
+
+# training data
+train = read.csv("train_users_2.csv")
+
+head(train)
+str(train)
+summary(train)
+
+# Notes on raw data
+# ID string not a factor?
+# date_account_created is a date, not a factor
+# timestamp_first_active is a timestamp not a factor
+# date_first_booking is a date not a factor
+# age has bad data (min 1 max 2014)
+
+# session data
+session = read.csv("sessions.csv")
+
+head(session)
+str(session)
+summary(session)
+summary(session$action)
+summary(session$action_type)
+summary(session$action_detail)
+
+# Notes on raw data
+# id as string not factor?
+
+## Loading/ installing required the libraries
+##
+##
+
+#install packages
+if(!require("leaps"))install.packages("leaps") 
+library(leaps)
+if(!require("glmnet"))install.packages("glmnet")
+library(glmnet)
+if(!require("Hmisc"))install.packages("Hmisc")
+library(Hmisc)
+if(!require("lattice"))install.packages("lattice")
+library(lattice)
+if(!require("pls"))install.packages("pls")
+library(pls)
+if(!require("ggvis"))install.packages("ggvis")
+library(ggvis)
+if(!require("boot"))install.packages("boot")
+library(boot)
+if(!require("rpart"))install.packages("rpart")
+library(rpart)
+if(!require("caret"))install.packages("caret")
+library(caret)
+if(!require("rattle"))install.packages("rattle")
+library(rattle)
+if(!require("ebdbNet"))install.packages("ebdbNet")
+library(ebdbNet)
+if(!require(“plyr”))install.packages(“plyr”)
+library(plyr)
+if(!require(“ggplot2”))install.packages(“ggplot2”)
+library(ggplot2)
+
+#handling missing variables
+#omit NA from the train - we get 125461 observations
+trainNA <- na.omit(train)
+#create copy of train data
+trainT <- train
+#assign NA to 999999
+trainT[is.na(trainT)] <- 999999
+#check - should be full dataset back
+trainNA <- na.omit(trainT)
+#change from blank to EMPTY
+trainT1 <- as.data.frame( sapply(trainT, 
+                                 function(x){ w <- as.character(x)
+                                 w[w == " "] <- "EMPTY"
+                                 return(w) } ))
+
+# set dates as date format
+trainT1$date_account_created = as.Date(trainT1$date_account_created, format = "%Y-%m-%d")
+trainT1$date_first_booking = as.Date(trainT1$date_first_booking, format = "%Y-%m-%d")
+trainT1$timestamp_first_active = as.Date(as.character(trainT1$timestamp_first_active), format="%Y%m%d")
+# calculate difference between first active and date created
+trainT1$first_active_to_acct_create =as.numeric(trainT1$timestamp_first_active - trainT1$date_account_created)
+
+
+
+#sample check
+
+trainT1$signup_method
+
+
+### Clean up age ###
+# identify clean mean age
+trainT1$age = as.numeric(trainT1$age)
+mean.age = summary(subset(trainT1, age>=18 & age<=90)$age)
+
+# impute mean age for ages <18 and over 90
+trainT1$age[trainT1$age <18 | trainT1$age>90] = mean.age
+summary(trainT1$age)
+
+
+# Data distributions
+histogram(trainT1$country_destination,trainT1)
+histogram(trainT1$first_browser,trainT1)
+histogram(trainT1$fist_device_type,trainT1)
+histogram(trainT1$signup_app,trainT1)
+histogram(trainT1$first_affiliate_tracked,trainT1)
+histogram(trainT1$affiliate_provider,trainT1)
+histogram(trainT1$affiliate_channel,trainT1)
+histogram(trainT1$language,trainT1)
+histogram(trainT1$signup_flow,trainT1)
+histogram(trainT1$signup_method,trainT1)
+histogram(trainT1$age,trainT1)
+histogram(trainT1$gender,trainT1)
+##histogram(trainT1$date_first_booking,trainT1)
+##histogram(trainT1$date_account_created,trainT1)
+##
+
+
+# Gender vs Country booked
+
+# summary of gender and country
+
+# count records
+train.count = length(trainT1$id)
+
+# Summarize gender
+ddply(trainT1, "gender", summarise, Count = length(id),
+ Pct = round(length(id)/train.count*100,2))
+
+# bar plot of gender
+ggplot(trainT1, aes(x=gender, fill=gender)) +
+  theme_bw()+
+  geom_bar(colour="black") +
+  scale_fill_manual(values=c("black","pink","blue","green"))
+
+# Summary of gender vs country
+
+sum_sex_country = ddply(trainT1, c("gender", "country_destination"), summarize, count=length(id))
+sum_sex_country = ddply(sum_sex_country, "country_destination", transform, pct = count/sum(count)*100)
+
+# bar plot of gender and country
+
+ggplot(sum_sex_country, aes(x=country_destination, y=count, fill=gender))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black") +
+  scale_fill_manual(values=c("black","pink","blue","green"))
+
+# facet by gender
+
+ggplot(sum_sex_country, aes(x=country_destination, y=count, fill=gender))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black") +
+  facet_wrap(~gender, scales="free_y")+
+  scale_fill_manual(values=c("black","pink","blue","green"))
+
+# proportional bar faceted by gender
+ggplot(sum_sex_country, aes(x=country_destination, y=pct, fill=gender))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black") +
+  scale_fill_manual(values=c("black","pink","blue","green")) +
+  facet_wrap(~gender)
+
+## Language
+
+sum_lan_country = ddply(trainT1, c("language", "country_destination"), summarize, count=length(id))
+sum_lan_country = ddply(sum_lan_country, "country_destination", transform, pct = count/sum(count)*100)
+
+# bar plot of language
+ggplot(trainT1, aes(x=language, fill=language)) +
+  theme_bw()+
+  geom_bar(colour="black")
+
+# bar plot of language excluding English
+ggplot(subset(trainT1,language!="en"), aes(x=language, fill=language)) +
+  theme_bw()+
+  geom_bar(colour="black")
+
+ggplot(sum_lan_country, aes(x=country_destination, y=count, fill=language))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black")
+
+# facet by language
+
+ggplot(sum_lan_country, aes(x=country_destination, y=count, fill=language))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black") +
+  facet_wrap(~language, scales="free_y")
+
+# Facet by destination country
+ggplot(sum_lan_country, aes(x=language, y=count, fill=language))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black") +
+  facet_wrap(~country_destination, scales="free_y")
+
+
+# Facet by destination country excluding english language
+ggplot(subset(sum_lan_country,language!="en"), aes(x=language, y=count, fill=language))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black") +
+  facet_wrap(~country_destination, scales="free_y")
+
+## Age
+hist(trainT1$age, main="Age distribution of Airbnb Users",xlab="Age",
+ ylab="Users", col="gray")
+
+
+summary(trainT1$age>1000)
+#779 records over 1000
+summary(trainT1$age>=100)
+# 2371 records over 100
+summary(trainT1$age<=18)
+# 827 records under 18
+
+hist(subset(trainT1,age<1000)$age, col="gray")
+
+ggplot(subset(trainT1, age<1000), aes(x=age)) +
+  geom_histogram(binwidth=10, colour="black", fill="gray")
+
+# Facet by country
+
+ggplot(subset(trainT1, age<1000), aes(x=age)) +
+  geom_histogram(binwidth=10, colour="black", fill="gray")+
+  facet_wrap(~country_destination, scales="free_y")
+
+
+## Signup method
+
+# bar plot of signup method
+ggplot(trainT1, aes(x=signup_method, fill=signup_method)) +
+  theme_bw()+
+  geom_bar(colour="black")
+
+# Facet by country
+
+sum_meth_country = ddply(trainT1, c("signup_method", "country_destination"), summarize, count=length(id))
+
+ggplot(sum_meth_country, aes(x=signup_method, y=count, fill=signup_method))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black") +
+  facet_wrap(~country_destination, scales="free_y")
+
+
+## Affiliate channel
+
+# bar plot of affiliate channel
+ggplot(trainT1, aes(x=affiliate_channel, fill=affiliate_channel)) +
+  theme_bw()+
+  geom_bar(colour="black")
+
+# Facet by channel
+
+sum_chan_country = ddply(trainT1, c("affiliate_channel", "country_destination"), summarize, count=length(id))
+
+ggplot(sum_chan_country, aes(x=affiliate_channel, y=count, fill=affiliate_channel))+
+  theme_bw()+
+  geom_bar(stat="identity", colour="black") +
+  facet_wrap(~country_destination, scales="free_y")
+
+
+### Merge Session data
+
+# Condense account_type to one row per id
+id_act_type = ddply(session, c("user_id", "action_type"), summarize, count=length(user_id))
+id_act_type = dcast(id_act_type, user_id ~ action_type, value.var="count")
+id_act_type[is.na(id_act_type)] <- 0
+head(id_act_type)
+str(id_act_type)
+
+# rename acct type user id to match train data label
+names(id_act_type)
+names(trainT1)
+names(id_act_type)[names(id_act_type) == "user_id"] = c("id")
+names(id_act_type)[names(id_act_type) == "Var.2"] = c("act_type_blank")
+names(id_act_type)[names(id_act_type) == "-unknown-"] = c("act_type_-unknown-")
+names(id_act_type)[names(id_act_type) == "booking_request"] = c("act_type_booking_request")
+names(id_act_type)[names(id_act_type) == "booking_response"] = c("act_type_booking_response")
+names(id_act_type)[names(id_act_type) == "click"] = c("act_type_click")
+names(id_act_type)[names(id_act_type) == "data"] = c("act_type_data")
+names(id_act_type)[names(id_act_type) == "message_post"] = c("act_type_message_post")
+names(id_act_type)[names(id_act_type) == "modify"] = c("act_type_modify")
+names(id_act_type)[names(id_act_type) == "partner_callback"] = c("act_type_partner_callback")
+names(id_act_type)[names(id_act_type) == "submit"] = c("act_type_submit")
+names(id_act_type)[names(id_act_type) == "view"] = c("act_type_view")
+
+# merge with train data
+trainT2 = merge(trainT1, id_act_type, by="id", all.x=TRUE)
+head(trainT2)
+str(trainT1)
+str(trainT2)
+
+
+
+
+
+##### Modeling ######
+# Sample code that I put together to try to generate example outputs
+# Some of these take considerable time to run
+# especially Random forest and Support Vector Machine
+
+
+# add booked or not as binary variable
+trainT2$booked = as.factor(ifelse(trainT2$country_destination != "NDF","Booked","Not Booked"))
+trainT2$age = as.numeric(trainT2$age)
+summary(trainT2)
+
+### Logistic regression
+
+log.booked = glm(booked ~ gender+age+signup_method+language+affiliate_channel+affiliate_provider+first_affiliate_tracked+signup_app+first_device_type,
+ data=trainT2, family=binomial)
+summary(log.booked)
+prob.booked = predict(log.booked, type="response")
+prob.booked[1:10]
+
+pred.booked = rep("Booked",213451)
+pred.booked [prob.booked>.5]="Not Booked"
+
+table(pred.booked, trainT2$booked)
+
+
+# ROC Curve
+require(ROCR)
+
+pred.booked2 = prediction(predict(log.booked), trainT2$booked)
+perf.booked = performance(pred.booked2, "tpr","fpr")
+plot(perf.booked, main="ROC Sample")
+
+# Gains Chart
+gain.booked = performance(pred.booked2, "tpr","rpp")
+plot(gain.booked, main="Gain Sample")
+
+# lift chart
+lift.booked = performance(pred.booked2, "lift","rpp")
+plot(lift.booked, main="Lift Sample")
+
+
+
+### Classification Tree
+
+# load library
+require(tree)
+
+#build decision tree
+names(trainT2)
+str(trainT2)
+
+tree.book = tree(booked ~ gender+age+signup_method+language+affiliate_channel+affiliate_provider+first_affiliate_tracked+signup_app+first_device_type, data=trainT2)
+
+summary(tree.book)
+plot(tree.book)
+text(tree.book, pretty=0)
+
+# predict country booked
+tree.country = tree(country_destination~age+signup_method+language+affiliate_channel+affiliate_provider+first_affiliate_tracked+signup_app+first_device_type, data=trainT2)
+
+summary(tree.country)
+plot(tree.country, main="Country Classification Tree")
+text(tree.country, pretty=0)
+
+# predict results
+tree.pred = predict(tree.country, trainT2, type = "class")
+table(tree.pred, trainT2$country_destination)
+
+set.seed(3)
+cv.country = cv.tree(tree.country, FUN=prune.misclass)
+
+# plot error rate
+par(mfrow=c(1,2))
+plot(cv.country$size, cv.country$dev, type="b")
+plot(cv.country$k, cv.country$dev, type="b")
+
+### Random Forest
+
+require(randomForest)
+set.seed(1)
+
+#bagging
+bag.booked=randomForest(booked~age+signup_method+language+affiliate_channel+affiliate_provider+first_affiliate_tracked+signup_app+first_device_type,
+ data=trainT2,mtry=8, importance=TRUE)
+bag.booked
+plot(bag.booked)
+importance(bag.booked)
+
+# random forest
+rf.booked=randomForest(booked~age+signup_method+language+affiliate_channel+affiliate_provider+first_affiliate_tracked+signup_app+first_device_type,
+ data=trainT2,mtry=3, importance=TRUE)
+rf.booked
+importance(rf.booked)
+
+# boosting
+require(gbm)
+
+set.seed(1)
+trainT2$booked = as.factor(ifelse(trainT2$country_destination != "NDF",1,0))
+boost.booked=gbm(booked~age+signup_method+language+affiliate_channel+affiliate_provider+first_affiliate_tracked+signup_app+first_device_type,
+ data=trainT2, distribution="bernoulli", n.trees=5000, interaction.depth=3)
+
+summary(boost.booked)
+
+### SVM
+require(e1071)
+svm.book=svm(booked~age+signup_method+language+affiliate_channel+affiliate_provider+first_affiliate_tracked+signup_app+first_device_type,
+ data=trainT2, kernel="radial", gamma=1, cost=1)
+
+summary(svm.book)
+
+require(ROCR)
+fitted = predict(svm.book, trainT2, decision.values=TRUE)
+perf = performance (fitted, "tpr","fpr")
+plot(perf, main="Training Data")
+
+
+
+
